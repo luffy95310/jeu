@@ -1,0 +1,1955 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Jeu Vue du Dessus</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;700&display=swap" rel="stylesheet">
+    <style>
+        /* Styles pour que le corps et le HTML prennent toute la page et éliminent les marges par défaut */
+        html, body {
+            width: 100%;
+            height: 100%;
+            margin: 0;
+            overflow: hidden; /* Empêche les barres de défilement */
+            font-family: 'Inter', sans-serif;
+            transition: background-color 0.3s ease; /* Transition douce pour le changement de couleur de fond */
+        }
+        
+        canvas {
+            display: block;
+            /* Le canvas prendra la taille de la fenêtre via JavaScript, le fond sera géré par le body */
+        }
+
+        /* Styles pour le curseur du slider */
+        input[type="range"]::-webkit-slider-thumb {
+            -webkit-appearance: none;
+            appearance: none;
+            width: 20px;
+            height: 20px;
+            background: #4f46e5; /* indigo-600 */
+            cursor: pointer;
+            border-radius: 50%;
+        }
+
+        input[type="range"]::-moz-range-thumb {
+            width: 20px;
+            height: 20px;
+            background: #4f46e5; /* indigo-600 */
+            cursor: pointer;
+            border-radius: 50%;
+        }
+
+        /* Conteneur principal du menu (pour le centrage) */
+        #main-ui-wrapper {
+            position: fixed;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            width: 100%;
+            max-width: 480px; /* Taille maximale pour le menu */
+            padding: 2rem;
+            background-color: #1a202c; /* gray-900 pour le fond du wrapper */
+            border-radius: 0.5rem;
+            box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.1), 0 4px 6px -2px rgba(0, 0, 0, 0.05);
+            z-index: 2000; /* Assure qu'il est au-dessus du jeu */
+        }
+        /* Cache le menu principal et les paramètres quand le jeu est lancé */
+        #main-ui-wrapper.hidden {
+            display: none;
+        }
+
+        /* Conteneur pour le jeu (maintenant visible quand le jeu est actif) */
+        #game-container {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100vw;
+            height: 100vh;
+            display: none; /* Initialement masqué */
+            z-index: 1; /* Derrière le menu principal si visible */
+        }
+        #game-container.active {
+            display: block; /* Affiche le conteneur du jeu */
+        }
+
+        /* Styles pour le menu de sélection d'armes (fixé à droite dans le jeu) */
+        #weaponMenu {
+            position: fixed;
+            top: 0;
+            right: -280px; /* Caché hors de l'écran par default */
+            width: 280px; 
+            height: 100%;
+            background-color: rgba(0, 0, 0, 0.9); /* Fond plus sombre et plus opaque */
+            backdrop-filter: blur(8px); 
+            color: white;
+            padding: 24px; 
+            box-sizing: border-box;
+            transition: right 0.3s ease-in-out; 
+            z-index: 1000; /* Assure que le menu d'arme est au-dessus du canvas */
+            display: flex;
+            flex-direction: column;
+            justify-content: flex-start;
+            align-items: center;
+            gap: 24px;
+            overflow-y: auto;
+            box-shadow: -8px 0 16px rgba(0, 0, 0, 0.5);
+        }
+
+        #weaponMenu.open {
+            right: 0; /* Fait glisser le menu pour le rendre visible */
+        }
+
+        .weapon-selection-buttons {
+            @apply flex flex-col items-center gap-4 w-full;
+            margin-bottom: 20px;
+        }
+
+        .weapon-selection-buttons button {
+            @apply bg-blue-700 hover:bg-blue-800 text-white font-bold py-3 px-6 rounded-xl shadow-lg transition-all duration-200 transform hover:scale-105;
+            width: 90%;
+            cursor: pointer;
+            border: 2px solid rgba(255, 255, 255, 0.2);
+        }
+        /* Style spécifique pour les boutons d'arme désactivés */
+        .weapon-selection-buttons button:disabled {
+            @apply bg-gray-400 text-gray-700 cursor-not-allowed opacity-80; /* Gris clair et texte plus foncé pour le désactivé */
+        }
+
+        .upgrade-section {
+            @apply flex flex-col items-center mt-6 p-4 rounded-xl bg-gray-900 bg-opacity-70 shadow-inner;
+            width: 100%;
+        }
+        .upgrade-item {
+            @apply flex flex-col items-start mb-5 p-4 border border-gray-700 rounded-lg bg-gray-800 bg-opacity-80 shadow-md;
+            width: 95%;
+        }
+        .upgrade-label-row {
+            @apply flex justify-between items-center w-full mb-3;
+        }
+        .upgrade-label {
+            @apply text-lg font-semibold text-gray-200;
+        }
+        .upgrade-levels {
+            @apply flex gap-0.5;
+            width: 100%; 
+            box-sizing: border-box;
+            font-size: 24px;
+            line-height: 1;
+            align-items: center;
+        }
+        .upgrade-level-box {
+            color: #666;
+            display: inline-block;
+            width: 20px;
+            text-align: center;
+        }
+        .upgrade-level-box.filled {
+            color: #32CD32;
+        }
+        .upgrade-button {
+            @apply bg-green-600 hover:bg-green-700 text-white font-bold rounded-full w-9 h-9 flex items-center justify-center text-xl leading-none shadow-md transition-all duration-200 transform hover:scale-110;
+            cursor: pointer;
+            flex-shrink: 0;
+        }
+        .upgrade-button:disabled {
+            @apply bg-gray-600 cursor-not-allowed opacity-60;
+        }
+
+        /* Styles spécifiques pour la boutique */
+        #shopSection {
+            background: linear-gradient(145deg, #333 0%, #1a1a1a 100%);
+            border: 2px solid;
+            border-image: linear-gradient(45deg, #FFD700, #DAA520, #FFD700) 1;
+            box-shadow: 0 0 15px rgba(255, 215, 0, 0.4);
+            margin-top: 30px;
+            padding: 20px;
+        }
+
+        #shopSection .upgrade-item {
+            background-color: rgba(50, 50, 50, 0.7);
+            border-color: #DAA520;
+        }
+
+        #buyTurretButton {
+            @apply bg-gradient-to-br from-yellow-500 to-yellow-700 text-gray-900 font-extrabold py-3 px-6 rounded-lg shadow-xl transition-all duration-300 transform hover:scale-105;
+            border: 2px solid #FFD700;
+        }
+
+        #buyTurretButton:disabled {
+            @apply bg-gradient-to-br from-gray-500 to-gray-700 text-gray-300 cursor-not-allowed border-gray-400;
+        }
+
+        /* Conteneur pour le menu de pause (initialement masqué et centré sur le jeu) */
+        #pause-menu-container {
+            display: none; /* Initialement masqué */
+            position: fixed;
+            inset: 0;
+            align-items: center;
+            justify-content: center;
+            background-color: rgba(0, 0, 0, 0.75);
+            z-index: 50; /* Au-dessus du jeu et du menu d'armes */
+        }
+        #pause-menu-container.active {
+            display: flex;
+        }
+
+        /* Espace pour afficher les messages */
+        #message-area {
+            text-align: center;
+            color: #64dd17; /* Vert clair pour les messages */
+            margin-top: 1.5rem;
+            height: 1.5rem;
+            position: fixed;
+            bottom: 1rem;
+            width: 100%;
+            z-index: 40;
+            pointer-events: none; /* Permet de cliquer à travers */
+        }
+
+        /* Styles pour le remappage des touches */
+        .key-bind-item {
+            @apply flex justify-between items-center bg-gray-700 p-3 rounded-md cursor-pointer hover:bg-gray-600 transition;
+        }
+        .key-bind-item.remapping {
+            @apply bg-indigo-700; /* Indique l'état de remappage */
+        }
+        .key-bind-display {
+            @apply bg-gray-500 px-3 py-1 rounded-md text-sm font-sans font-bold;
+        }
+        .key-bind-item.remapping .key-bind-display {
+            @apply bg-indigo-400 text-white;
+        }
+    </style>
+</head>
+<body class="bg-gray-900 flex items-center justify-center min-h-screen"> <!-- Le body commence en bg-gray-900 pour le menu -->
+
+    <!-- Conteneur principal du menu (pour le centrage) -->
+    <div id="main-ui-wrapper" class="w-full max-w-sm p-8 bg-gray-800 rounded-lg shadow-xl">
+        
+        <!-- Titre principal (affiché uniquement avec le menu principal) -->
+        <h1 id="mainTitle" class="text-white text-5xl font-bold text-center mb-12 tracking-wider">
+            Mon Jeu
+        </h1>
+
+        <!-- Conteneur pour le menu principal -->
+        <div id="menu-container" class="flex flex-col space-y-5">
+            <button id="playButton" class="w-full bg-indigo-600 text-white font-bold py-4 px-6 rounded-lg text-lg shadow-lg hover:bg-indigo-700 focus:outline-none focus:ring-4 focus:ring-indigo-500 focus:ring-opacity-50 transition duration-300 ease-in-out transform hover:scale-105">
+                Jouer
+            </button>
+            <button id="settingsButton" class="w-full bg-gray-700 text-white font-bold py-4 px-6 rounded-lg text-lg shadow-lg hover:bg-gray-800 focus:outline-none focus:ring-4 focus:ring-gray-500 focus:ring-opacity-50 transition duration-300 ease-in-out transform hover:scale-105">
+                Paramètres
+            </button>
+            <button id="quitButton" class="w-full bg-red-600 text-white font-bold py-4 px-6 rounded-lg text-lg shadow-lg hover:bg-red-700 focus:outline-none focus:ring-4 focus:ring-red-500 focus:ring-opacity-50 transition duration-300 ease-in-out transform hover:scale-105">
+                Quitter
+            </button>
+        </div>
+
+        <!-- Conteneur pour le menu des paramètres (initialement masqué) -->
+        <div id="settings-container" class="hidden flex flex-col space-y-6 text-white">
+            <h2 class="text-3xl font-bold text-center mb-4">Paramètres</h2>
+            
+            <!-- Paramètre Volume -->
+            <div class="space-y-2">
+                <label for="volume" class="font-bold text-lg">Volume du son</label>
+                <div class="flex items-center space-x-3">
+                    <span class="text-xl">🔇</span>
+                    <input type="range" id="volume" name="volume" min="0" max="100" value="75" class="w-full h-2 bg-gray-700 rounded-lg appearance-none cursor-pointer">
+                    <span class="text-xl">🔊</span>
+                </div>
+            </div>
+
+            <!-- Paramètre Qualité -->
+            <div class="space-y-2">
+                <label class="font-bold text-lg">Qualité graphique</label>
+                <div class="flex justify-between space-x-2 quality-buttons">
+                    <button class="quality-btn w-full bg-gray-600 hover:bg-indigo-500 rounded p-2 transition">Basse</button>
+                    <button class="quality-btn w-full bg-indigo-600 rounded p-2 transition">Moyenne</button>
+                    <button class="quality-btn w-full bg-gray-600 hover:bg-indigo-500 rounded p-2 transition">Haute</button>
+                </div>
+            </div>
+
+            <!-- Paramètre Touches - Section d'affichage principale -->
+            <div id="key-display-section" class="space-y-2">
+                <label class="font-bold text-lg">Touches</label>
+                <div class="bg-gray-800 p-4 rounded-lg space-y-2">
+                    <div class="flex justify-between items-center"><p>Avancer</p> <kbd id="key-forward" class="bg-gray-600 px-3 py-1 rounded-md text-sm font-sans">Z</kbd></div>
+                    <div class="flex justify-between items-center"><p>Reculer</p> <kbd id="key-backward" class="bg-gray-600 px-3 py-1 rounded-md text-sm font-sans">S</kbd></div>
+                    <div class="flex justify-between items-center"><p>Gauche</p> <kbd id="key-left" class="bg-gray-600 px-3 py-1 rounded-md text-sm font-sans">Q</kbd></div>
+                    <div class="flex justify-between items-center"><p>Droite</p> <kbd id="key-right" class="bg-gray-600 px-3 py-1 rounded-md text-sm font-sans">D</kbd></div>
+                </div>
+                <button id="remapKeysButton" class="w-full mt-2 bg-gray-700 text-white font-bold py-2 px-4 rounded-lg hover:bg-gray-800 focus:outline-none focus:ring-2 focus:ring-gray-500">
+                    Changer les touches
+                </button>
+            </div>
+
+            <!-- Conteneur pour le menu de remappage (initiallement masqué) -->
+            <div id="remap-interface" class="hidden flex flex-col space-y-4 text-white">
+                <h3 class="text-2xl font-bold text-center mb-2">Modifier les touches</h3>
+                <p class="text-center text-sm text-gray-400 mb-4">Cliquez sur une touche à modifier, puis appuyez sur la nouvelle touche.</p>
+                
+                <div class="key-bind-item" data-action="forward">
+                    <p>Avancer</p> <span class="key-bind-display">Z</span>
+                </div>
+                <div class="key-bind-item" data-action="backward">
+                    <p>Reculer</p> <span class="key-bind-display">S</span>
+                </div>
+                <div class="key-bind-item" data-action="left">
+                    <p>Gauche</p> <span class="key-bind-display">Q</span>
+                </div>
+                <div class="key-bind-item" data-action="right">
+                    <p>Droite</p> <span class="key-bind-display">D</span>
+                </div>
+
+                <button id="backFromRemapButton" class="w-full bg-gray-700 text-white font-bold py-3 px-4 rounded-lg text-md shadow-md hover:bg-gray-800 transition mt-4">
+                    Retour aux Paramètres
+                </button>
+            </div>
+            
+            <!-- Bouton Retour du menu Paramètres -->
+            <button id="backButton" class="w-full bg-gray-700 text-white font-bold py-4 px-6 rounded-lg text-lg shadow-lg hover:bg-gray-800 focus:outline-none focus:ring-4 focus:ring-gray-500 focus:ring-opacity-50 transition duration-300 ease-in-out transform hover:scale-105 mt-6">
+                Retour
+            </button>
+        </div>
+    </div> <!-- Fin du main-ui-wrapper -->
+
+    <!-- Conteneur pour le jeu (initialement masqué) -->
+    <div id="game-container">
+        <canvas id="gameCanvas"></canvas>
+
+        <!-- Menu de sélection d'armes et améliorations (fait partie de l'UI du jeu) -->
+        <div id="weaponMenu">
+            <h2 class="text-2xl font-extrabold mb-6 text-center text-green-400">Armes & Améliorations</h2>
+            <div class="weapon-selection-buttons">
+                <button id="pistolButton">Pistolet</button>
+                <button id="assaultRifleButton" disabled>Fusil d'assaut (Niveau 10 requis)</button>
+            </div>
+            <div id="upgradeSection" class="upgrade-section">
+                <h3 class="text-xl font-bold mb-4 text-center">Améliorations (<span id="currentWeaponName" class="text-yellow-300"></span>)</h3>
+                <!-- Les améliorations seront injectées ici par JS -->
+            </div>
+            <!-- Nouvelle section pour la boutique -->
+            <div id="shopSection" class="upgrade-section"> 
+                <h3 class="text-xl font-bold mb-4 text-center text-yellow-400">Boutique</h3>
+                <div class="upgrade-item"> 
+                    <div class="upgrade-label-row">
+                        <span class="upgrade-label text-yellow-200">Tourelle Automatique</span>
+                        <button id="buyTurretButton" disabled>Acheter (30 Pièces)</button>
+                    </div>
+                    <p class="text-sm text-gray-300 mt-2">Dégâts: <span id="turretDamageDisplay"></span>, Cadence: <span id="turretFireRateDisplay"></span>s, Portée: <span id="turretRangeDisplay"></span></p>
+                    <p class="text-sm text-gray-300">Pièces actuelles: <span id="currentCoinsDisplay">0</span></p>
+                </div>
+                <!-- Conteneur pour les améliorations de tourelles individuelles -->
+                <div id="turretUpgradeContainer" class="w-full mt-4">
+                    <!-- Les tourelles achetées et leurs options d'amélioration seront injectées ici par JS -->
+                </div>
+            </div>
+            <div class="mt-auto pt-6 text-sm text-gray-400 text-center">
+                Appuyez sur 'B' pour fermer/ouvrir le menu.
+            </div>
+        </div>
+    </div>
+
+    <!-- Conteneur pour le menu de pause (initialement masqué et centré sur le jeu) -->
+    <div id="pause-menu-container">
+        <div class="bg-gray-800 p-8 rounded-lg shadow-xl text-white flex flex-col space-y-4 w-full max-w-xs">
+            <h2 class="text-3xl font-bold text-center mb-4">Jeu en Pause</h2>
+            <button id="resumeGameButton" class="w-full bg-indigo-600 text-white font-bold py-3 px-4 rounded-lg text-md shadow-md hover:bg-indigo-700 transition">
+                Reprendre
+            </button>
+            <button id="backToMenuFromGame" class="w-full bg-gray-700 text-white font-bold py-3 px-4 rounded-lg text-md shadow-md hover:bg-gray-800 transition">
+                Retour au Menu Principal
+            </button>
+        </div>
+    </div>
+        
+    <!-- Espace pour afficher les messages -->
+    <div id="message-area" class="text-center text-green-400 mt-6 h-6 fixed bottom-4 w-full z-40"></div>
+
+
+    <script>
+        // --- SETUP AUDIO ---
+        let audioContext;
+        let masterGainNode;
+        let isAudioInitialized = false;
+
+        // Fonction pour initialiser l'audio. Doit être appelée après une interaction de l'utilisateur.
+        function initAudio() {
+            if (isAudioInitialized) return;
+            audioContext = new (window.AudioContext || window.webkitAudioContext)();
+            masterGainNode = audioContext.createGain();
+            masterGainNode.connect(audioContext.destination);
+            masterGainNode.gain.value = volumeSlider.value / 100;
+            isAudioInitialized = true;
+            console.log('Audio Context Initialized.');
+        }
+
+        // Fonction pour jouer un court "bip" de test (pour le slider)
+        function playSoundFeedback() {
+            if (!isAudioInitialized) {
+                console.warn('Audio Context not initialized. Cannot play sound feedback.');
+                return;
+            }
+            
+            const oscillator = audioContext.createOscillator();
+            oscillator.type = 'sine';
+            oscillator.frequency.setValueAtTime(440, audioContext.currentTime);
+            
+            const envelopeGain = audioContext.createGain();
+            envelopeGain.gain.setValueAtTime(0, audioContext.currentTime);
+            envelopeGain.gain.linearRampToValueAtTime(1, audioContext.currentTime + 0.01);
+            envelopeGain.gain.exponentialRampToValueAtTime(0.001, audioContext.currentTime + 0.2);
+            
+            oscillator.connect(envelopeGain);
+            envelopeGain.connect(masterGainNode);
+            
+            oscillator.start();
+            oscillator.stop(audioContext.currentTime + 0.2);
+        }
+
+        // Nouvelle fonction pour jouer un son de clic pour les boutons
+        function playClickSound() {
+            if (!isAudioInitialized) {
+                console.warn('Audio Context not initialized. Cannot play click sound.');
+                return;
+            }
+
+            const oscillator = audioContext.createOscillator();
+            oscillator.type = 'square';
+            oscillator.frequency.setValueAtTime(880, audioContext.currentTime);
+
+            const envelopeGain = audioContext.createGain();
+            envelopeGain.gain.setValueAtTime(0, audioContext.currentTime);
+            envelopeGain.gain.linearRampToValueAtTime(0.5, audioContext.currentTime + 0.005);
+            envelopeGain.gain.exponentialRampToValueAtTime(0.001, audioContext.currentTime + 0.08);
+
+            oscillator.connect(envelopeGain);
+            envelopeGain.connect(masterGainNode);
+
+            oscillator.start();
+            oscillator.stop(audioContext.currentTime + 0.08);
+        }
+
+        /**
+         * Joue un son de tir générique.
+         */
+        function playShootSound() {
+            if (!isAudioInitialized) return;
+            const oscillator = audioContext.createOscillator();
+            const gainNode = audioContext.createGain();
+
+            oscillator.type = 'sine';
+            oscillator.frequency.setValueAtTime(800, audioContext.currentTime); // Haute fréquence pour un "pew" rapide
+            oscillator.frequency.exponentialRampToValueAtTime(400, audioContext.currentTime + 0.05); // Décroissance rapide de la hauteur
+
+            gainNode.gain.setValueAtTime(0.5, audioContext.currentTime); // Volume de départ
+            gainNode.gain.exponentialRampToValueAtTime(0.001, audioContext.currentTime + 0.1); // Fondu rapide
+
+            oscillator.connect(gainNode);
+            gainNode.connect(masterGainNode);
+
+            oscillator.start();
+            oscillator.stop(audioContext.currentTime + 0.1);
+        }
+
+        /**
+         * Joue un son lorsque le joueur subit des dégâts.
+         */
+        function playDamageSound() {
+            if (!isAudioInitialized) return;
+            const oscillator = audioContext.createOscillator();
+            const gainNode = audioContext.createGain();
+
+            oscillator.type = 'sawtooth'; // Une forme d'onde plus dure
+            oscillator.frequency.setValueAtTime(120, audioContext.currentTime); // Basse fréquence pour un "thud"
+            oscillator.frequency.exponentialRampToValueAtTime(80, audioContext.currentTime + 0.2);
+
+            gainNode.gain.setValueAtTime(0.8, audioContext.currentTime); // Volume initial fort
+            gainNode.gain.exponentialRampToValueAtTime(0.001, audioContext.currentTime + 0.3); // Décroissance
+
+            oscillator.connect(gainNode);
+            gainNode.connect(masterGainNode);
+
+            oscillator.start();
+            oscillator.stop(audioContext.currentTime + 0.3);
+        }
+
+        /**
+         * Joue un son lorsqu'un zombie meurt.
+         */
+        function playDeathSound() {
+            if (!isAudioInitialized) return;
+            const bufferSize = audioContext.sampleRate * 0.1; // 0.1 seconde de bruit
+            const buffer = audioContext.createBuffer(1, bufferSize, audioContext.sampleRate);
+            const data = buffer.getChannelData(0);
+
+            // Générer du bruit blanc
+            for (let i = 0; i < bufferSize; i++) {
+                data[i] = Math.random() * 2 - 1;
+            }
+
+            const source = audioContext.createBufferSource();
+            source.buffer = buffer;
+
+            const gainNode = audioContext.createGain();
+            gainNode.gain.setValueAtTime(0.3, audioContext.currentTime); // Volume initial
+            gainNode.gain.exponentialRampToValueAtTime(0.001, audioContext.currentTime + 0.1); // Fondu rapide
+
+            source.connect(gainNode);
+            gainNode.connect(masterGainNode);
+
+            source.start();
+            source.stop(audioContext.currentTime + 0.1);
+        }
+
+        /**
+         * Joue un son de rechargement.
+         */
+        function playReloadSound() {
+            if (!isAudioInitialized) return;
+            const oscillator = audioContext.createOscillator();
+            const gainNode = audioContext.createGain();
+
+            oscillator.type = 'triangle'; // Un son plus doux pour le rechargement
+            oscillator.frequency.setValueAtTime(200, audioContext.currentTime); // Basse fréquence
+            oscillator.frequency.exponentialRampToValueAtTime(300, audioContext.currentTime + 0.1); // Montée légère
+
+            gainNode.gain.setValueAtTime(0.4, audioContext.currentTime); // Volume
+            gainNode.gain.exponentialRampToValueAtTime(0.001, audioContext.currentTime + 0.5); // Durée plus longue pour le rechargement
+
+            oscillator.connect(gainNode);
+            gainNode.connect(masterGainNode);
+
+            oscillator.start();
+            oscillator.stop(audioContext.currentTime + 0.5);
+        }
+
+
+        // --- SÉLECTION DES ÉLÉMENTS DU DOM POUR LES MENUS ---
+        const mainUiWrapper = document.getElementById('main-ui-wrapper');
+        const menuContainer = document.getElementById('menu-container');
+        const settingsContainer = document.getElementById('settings-container');
+        const gameContainer = document.getElementById('game-container');
+        const pauseMenuContainer = document.getElementById('pause-menu-container');
+        const mainTitle = document.getElementById('mainTitle');
+        const playButton = document.getElementById('playButton');
+        const settingsButton = document.getElementById('settingsButton');
+        const quitButton = document.getElementById('quitButton');
+        const backButton = document.getElementById('backButton');
+        const resumeGameButton = document.getElementById('resumeGameButton');
+        const backToMenuFromGameButton = document.getElementById('backToMenuFromGame');
+        const volumeSlider = document.getElementById('volume');
+        const qualityButtonsContainer = document.querySelector('.quality-buttons');
+        const remapKeysButton = document.getElementById('remapKeysButton');
+        const messageArea = document.getElementById('message-area');
+
+        // Nouveaux éléments DOM pour le remappage des touches
+        const keyDisplaySection = document.getElementById('key-display-section');
+        const remapInterface = document.getElementById('remap-interface');
+        const backFromRemapButton = document.getElementById('backFromRemapButton');
+        const keyForwardDisplay = document.getElementById('key-forward');
+        const keyBackwardDisplay = document.getElementById('key-backward');
+        const keyLeftDisplay = document.getElementById('key-left');
+        const keyRightDisplay = document.getElementById('key-right');
+        const remapKeyItems = document.querySelectorAll('#remap-interface .key-bind-item');
+
+        // --- ÉTAT GLOBAL POUR LA NAVIGATION UI ---
+        let currentScreen = 'mainMenu'; // 'mainMenu', 'settings', 'game', 'pause', 'remapKeys'
+
+        // --- État du remappage des touches ---
+        let isRemapping = false;
+        let currentRemapAction = null; // 'forward', 'backward', 'left', 'right'
+        let currentRemapElement = null; // L'élément DOM en cours de remappage
+
+        // Fonction pour afficher un message temporaire
+        function showMessage(text, duration = 2000) {
+            messageArea.textContent = text;
+            messageArea.classList.remove('hidden');
+            setTimeout(() => {
+                messageArea.textContent = '';
+                messageArea.classList.add('hidden');
+            }, duration);
+        }
+
+        /**
+         * Fonction utilitaire pour définir la visibilité de l'écran.
+         * @param {string} screenName - Le nom de l'écran à afficher ('mainMenu', 'settings', 'game', 'pause', 'remapKeys').
+         */
+        function setScreen(screenName) {
+            currentScreen = screenName;
+            mainUiWrapper.classList.add('hidden');
+            gameContainer.classList.remove('active'); 
+            pauseMenuContainer.classList.remove('active'); 
+            
+            // Supprimer les classes d'arrière-plan précédentes
+            document.body.classList.remove('bg-gray-900', 'bg-green-800', 'flex', 'items-center', 'justify-content-center', 'min-h-screen');
+
+            // Cacher toutes les sous-sections des paramètres d'abord
+            menuContainer.classList.add('hidden');
+            settingsContainer.classList.add('hidden');
+            keyDisplaySection.classList.add('hidden'); // Cacher la section d'affichage des touches par défaut
+            remapInterface.classList.add('hidden'); // Cacher l'interface de remappage par défaut
+            mainTitle.classList.add('hidden'); // Cacher le titre principal par défaut
+
+            switch (currentScreen) {
+                case 'mainMenu':
+                    mainUiWrapper.classList.remove('hidden');
+                    menuContainer.classList.remove('hidden');
+                    mainTitle.classList.remove('hidden');
+                    document.body.classList.add('bg-gray-900', 'flex', 'items-center', 'justify-content-center', 'min-h-screen');
+                    // S'assurer que le menu d'armes est fermé lors du retour au menu principal
+                    isMenuOpen = false;
+                    weaponMenu.classList.remove('open');
+                    break;
+                case 'settings':
+                    mainUiWrapper.classList.remove('hidden');
+                    settingsContainer.classList.remove('hidden');
+                    keyDisplaySection.classList.remove('hidden'); // Afficher la section d'affichage des touches dans les paramètres
+                    document.body.classList.add('bg-gray-900', 'flex', 'items-center', 'justify-content-center', 'min-h-screen');
+                    updateKeyBindingsUI(); // S'assurer que les liaisons de touches sont à jour
+                    break;
+                case 'remapKeys':
+                    mainUiWrapper.classList.remove('hidden');
+                    settingsContainer.classList.remove('hidden'); // Garder le conteneur des paramètres visible
+                    remapInterface.classList.remove('hidden'); // Afficher l'interface de remappage
+                    document.body.classList.add('bg-gray-900', 'flex', 'items-center', 'justify-content-center', 'min-h-screen');
+                    updateRemapInterfaceUI(); // Mettre à jour l'interface utilisateur pour le remappage
+                    break;
+                case 'game':
+                    mainUiWrapper.classList.add('hidden'); 
+                    gameContainer.classList.add('active'); 
+                    pauseMenuContainer.classList.remove('active'); 
+                    document.body.classList.add('bg-green-800'); 
+                    document.body.classList.remove('flex', 'items-center', 'justify-content-center', 'min-h-screen'); 
+                    break;
+                case 'pause':
+                    gameContainer.classList.add('active'); 
+                    pauseMenuContainer.classList.add('active'); 
+                    document.body.classList.add('bg-green-800'); 
+                    document.body.classList.remove('flex', 'items-center', 'justify-content-center', 'min-h-screen');
+                    break;
+            }
+        }
+
+        // --- VARIABLES ET FONCTIONS LIÉES AU JEU (du code original du jeu) ---
+        const canvas = document.getElementById('gameCanvas');
+        const ctx = canvas.getContext('2d');
+
+        // Commandes du joueur associant les actions réelles aux noms des touches
+        const playerControls = {
+            forward: 'z',
+            backward: 's',
+            left: 'q',
+            right: 'd'
+        };
+
+        // Cet objet `keys` suit quelles touches *physiques* sont actuellement enfoncées
+        const keys = {}; 
+
+        // Variables du personnage
+        const player = {
+            x: 0, 
+            y: 0, 
+            radius: 12, 
+            color: 'orange', 
+            speed: 0.375, 
+            maxHealth: 100, 
+            currentHealth: 100, 
+            invincible: false, 
+            invincibilityTime: 1000, 
+            currentXP: 0,
+            level: 1,
+            xpToNextLevel: 0, 
+            pointsDeCompetence: 0,
+            coins: 0, 
+            weapons: {
+                pistol: {
+                    id: 'pistol',
+                    name: 'Pistolet',
+                    baseFireRate: 200, 
+                    baseMaxAmmoInClip: 10,
+                    baseReloadTime: 3000, 
+                    gunLength: 20,
+                    gunThickness: 4,
+                    bulletProperties: {
+                        radius: 3,
+                        color: 'yellow',
+                        speed: 5,
+                        baseDamage: 34 
+                    },
+                    upgrades: { 
+                        damage: { label: 'Dégâts', level: 0, maxLevel: 9, cost: 1, effect: (level) => 1 + (level * 0.1) },
+                        fireRate: { label: 'Cadence de tir', level: 0, maxLevel: 9, cost: 1, effect: (level) => 1 - (level * 0.05) },
+                        magazineSize: { label: 'Capacité du chargeur', level: 0, maxLevel: 9, cost: 1, effect: (level) => 1 + (level * 0.15) },
+                        reloadSpeed: { label: 'Vitesse de rechargement', level: 0, maxLevel: 9, cost: 1, effect: (level) => 1 - (level * 0.05) }
+                    }
+                },
+                assaultRifle: {
+                    id: 'assaultRifle',
+                    name: 'Fusil d\'assaut',
+                    baseFireRate: 80, 
+                    baseMaxAmmoInClip: 30,
+                    baseReloadTime: 3000, 
+                    gunLength: 25, 
+                    gunThickness: 5, 
+                    bulletProperties: {
+                        radius: 3,
+                        color: 'lightgreen', 
+                        speed: 7, 
+                        baseDamage: 20 
+                    },
+                    upgrades: {
+                        damage: { label: 'Dégâts', level: 0, maxLevel: 9, cost: 1, effect: (level) => 1 + (level * 0.08) },
+                        fireRate: { label: 'Cadence de tir', level: 0, maxLevel: 9, cost: 1, effect: (level) => 1 - (level * 0.04) },
+                        magazineSize: { label: 'Capacité du chargeur', level: 0, maxLevel: 9, cost: 1, effect: (level) => 1 + (level * 0.1) },
+                        reloadSpeed: { label: 'Vitesse de rechargement', level: 0, maxLevel: 9, cost: 1, effect: (level) => 1 - (level * 0.04) }
+                    }
+                }
+            },
+            currentWeaponType: 'pistol', 
+            currentWeapon: null, 
+            currentAmmoInClip: 0, 
+            lastShotTime: 0,
+            reloading: false
+        };
+
+        let mouseX = 0;
+        let mouseY = 0;
+        const bullets = [];
+        const zombies = [];
+
+        const zombieProperties = { type: 'normal', radius: player.radius, color: '#336633', speed: 0.2, maxHealth: 100, xpValue: 25, coinsValue: 1 };
+        const fastZombieProperties = { type: 'fast', radius: player.radius * 0.7, color: '#8B0000', speed: 0.45, maxHealth: 75, xpValue: 35, coinsValue: 2 };
+        const bossZombieProperties = { type: 'boss', radius: player.radius * 2, color: '#4F4F4F', speed: 0.05, maxHealth: 500, xpValue: 200, coinsValue: 10 };
+
+        const turrets = [];
+        const obstacles = [];
+        const rockProperties = { radius: 30, color: '#808080' };
+
+        const deathParticles = [];
+        const gunParticles = [];
+
+        const turretProperties = {
+            radius: 15, color: '#8A2BE2', baseFireRate: 800, baseDamage: 25, baseRange: 250, baseBulletSpeed: 3,
+            gunLength: 15, gunThickness: 3, cost: 30, upgradeCost: 50, maxLevel: 2, maxHealth: 150
+        };
+
+        let lastZombieSpawnTime = 0; 
+        let zombieSpawnInterval = 3000; 
+        let lastFastZombieSpawnTime = 0; 
+        const fastZombieSpawnInterval = 15000; 
+        let lastBossZombieSpawnTime = 0; 
+        const bossZombieSpawnInterval = 120000; 
+        const zombieStunDuration = 1000; 
+
+        let gameTime = 0; // Temps de jeu total en millisecondes
+        let lastMinuteUpdate = 0; 
+
+        const hordeInterval = 300000; 
+        let lastHordeTime = 0;
+        let hordeMultiplier = 1;
+        const baseHordeNormalZombies = 30;
+        const baseHordeFastZombies = 10;
+        const baseHordeBossZombies = 1;
+
+        let lastFrameTime = 0; // Temps de la dernière frame pour le calcul du deltaTime
+        let gameOver = false;
+
+        // Éléments d'interface utilisateur du jeu
+        let isMenuOpen = false; // Ceci est pour le menu d'armes en jeu
+        const weaponMenu = document.getElementById('weaponMenu');
+        const upgradeSection = document.getElementById('upgradeSection');
+        const currentWeaponNameDisplay = document.getElementById('currentWeaponName');
+        const assaultRifleButton = document.getElementById('assaultRifleButton'); 
+
+        const shopSection = document.getElementById('shopSection');
+        const buyTurretButton = document.getElementById('buyTurretButton');
+        const currentCoinsDisplay = document.getElementById('currentCoinsDisplay');
+        const turretDamageDisplay = document.getElementById('turretDamageDisplay');
+        const turretFireRateDisplay = document = document.getElementById('turretFireRateDisplay');
+        const turretRangeDisplay = document.getElementById('turretRangeDisplay');
+        const turretUpgradeContainer = document.getElementById('turretUpgradeContainer'); 
+
+
+        function distance(x1, y1, x2, y2) {
+            const dx = x2 - x1;
+            const dy = y2 - y1;
+            return Math.sqrt(dx * dx + dy * dy);
+        }
+
+        function calculateXpRequired(level) {
+            return Math.floor(100 * Math.pow(1.2, level - 1));
+        }
+
+        function resizeCanvas() {
+            canvas.width = window.innerWidth;
+            canvas.height = window.innerHeight;
+            player.x = canvas.width / 2;
+            player.y = canvas.height / 2;
+        }
+
+        function selectWeapon(weaponType) {
+            if (weaponType === 'assaultRifle' && player.level < 10) {
+                console.log("Fusil d'assaut est verrouillé jusqu'au niveau 10 !");
+                return; 
+            }
+            player.currentWeaponType = weaponType;
+            player.currentWeapon = player.weapons[weaponType];
+            updateWeaponStats();
+            player.currentAmmoInClip = player.currentWeapon.maxAmmoInClip;
+            player.reloading = false;
+            player.lastShotTime = 0; 
+            renderUpgradeSection(); 
+        }
+
+        function updateWeaponStats() {
+            const weapon = player.currentWeapon;
+            weapon.bulletProperties.currentDamage = weapon.bulletProperties.baseDamage * weapon.upgrades.damage.effect(weapon.upgrades.damage.level);
+            weapon.fireRate = Math.max(50, weapon.baseFireRate * weapon.upgrades.fireRate.effect(weapon.upgrades.fireRate.level)); 
+            weapon.maxAmmoInClip = Math.floor(weapon.baseMaxAmmoInClip * weapon.upgrades.magazineSize.effect(weapon.upgrades.magazineSize.level));
+            weapon.reloadTime = Math.max(500, weapon.baseReloadTime * weapon.upgrades.reloadSpeed.effect(weapon.upgrades.reloadSpeed.level));
+            if (player.currentAmmoInClip > weapon.maxAmmoInClip) {
+                player.currentAmmoInClip = weapon.maxAmmoInClip;
+            }
+        }
+
+        function spawnZombie(properties) {
+            let x, y;
+            const edge = Math.floor(Math.random() * 4); 
+
+            switch (edge) {
+                case 0: // Haut
+                    x = Math.random() * canvas.width;
+                    y = -properties.radius;
+                    break;
+                case 1: // Droite
+                    x = canvas.width + properties.radius;
+                    y = Math.random() * canvas.height;
+                    break;
+                case 2: // Bas
+                    x = Math.random() * canvas.width;
+                    y = canvas.height + properties.radius;
+                    break;
+                case 3: // Gauche
+                    x = -properties.radius;
+                    y = Math.random() * canvas.height;
+                    break;
+            }
+
+            zombies.push({
+                x: x, y: y, radius: properties.radius, color: properties.color, speed: properties.speed,
+                health: properties.maxHealth, type: properties.type, xpValue: properties.xpValue,
+                coinsValue: properties.coinsValue, stunned: false, stunTime: 0
+            });
+        }
+
+        function spawnHorde() {
+            const numNormalZombies = Math.floor(baseHordeNormalZombies * hordeMultiplier);
+            const numFastZombies = Math.floor(baseHordeFastZombies * hordeMultiplier);
+            const numBossZombies = Math.floor(baseHordeBossZombies * hordeMultiplier);
+
+            for (let i = 0; i < numNormalZombies; i++) { spawnZombie(zombieProperties); }
+            for (let i = 0; i < numFastZombies; i++) { spawnZombie(fastZombieProperties); }
+            for (let i = 0; i < numBossZombies; i++) { spawnZombie(bossZombieProperties); }
+            console.log(`Horde générée : ${numNormalZombies} normaux, ${numFastZombies} rapides, ${numBossZombies} boss. Multiplicateur : ${hordeMultiplier}`);
+        }
+
+        function renderUpgradeSection() {
+            currentWeaponNameDisplay.textContent = player.currentWeapon.name;
+            upgradeSection.innerHTML = `<h3 class="text-xl font-bold mb-4 text-center">Améliorations (<span id="currentWeaponName" class="text-yellow-300">${player.currentWeapon.name}</span>)</h3>`;
+
+            const upgrades = player.currentWeapon.upgrades;
+            for (const key in upgrades) {
+                if (upgrades.hasOwnProperty(key)) {
+                    const upgrade = upgrades[key];
+                    const upgradeItemDiv = document.createElement('div');
+                    upgradeItemDiv.className = 'upgrade-item'; 
+
+                    upgradeItemDiv.innerHTML = `
+                        <div class="upgrade-label-row">
+                            <span class="upgrade-label">${upgrade.label}</span>
+                            <button class="upgrade-button" data-upgrade-stat="${key}" ${upgrade.level >= upgrade.maxLevel || player.pointsDeCompetence < upgrade.cost ? 'disabled' : ''}>
+                                +
+                            </button>
+                        </div>
+                        <div class="upgrade-levels">
+                            ${Array(upgrade.maxLevel).fill(0).map((_, i) => `
+                                <span class="upgrade-level-box ${i < upgrade.level ? 'filled' : ''}">${i < upgrade.level ? '▮' : '▭'}</span>
+                            `).join('')}
+                        </div>
+                    `;
+                    upgradeSection.appendChild(upgradeItemDiv);
+                }
+            }
+            upgradeSection.querySelectorAll('.upgrade-button').forEach(button => {
+                button.addEventListener('click', (e) => {
+                    const statName = e.target.dataset.upgradeStat;
+                    upgradeWeaponStat(statName);
+                });
+            });
+        }
+
+        function upgradeWeaponStat(statName) {
+            const upgrade = player.currentWeapon.upgrades[statName];
+            if (upgrade && upgrade.level < upgrade.maxLevel && player.pointsDeCompetence >= upgrade.cost) {
+                upgrade.level++;
+                player.pointsDeCompetence -= upgrade.cost;
+                updateWeaponStats(); 
+                renderUpgradeSection(); 
+            } else {
+                console.warn(`Impossible d'améliorer ${statName}. Niveau: ${upgrade.level}/${upgrade.maxLevel}, Points: ${player.pointsDeCompetence}/${upgrade.cost}`);
+            }
+        }
+
+        function updateTurretStats(turret) {
+            if (turret.level === 2) {
+                turret.currentDamage = turret.baseDamage * 2;
+                turret.currentFireRate = turret.baseFireRate / 2; 
+                turret.currentRange = turret.baseRange * 1.5; 
+                turret.currentBulletSpeed = turret.baseBulletSpeed * 1.5; 
+            } else { 
+                turret.currentDamage = turret.baseDamage;
+                turret.currentFireRate = turret.baseFireRate;
+                turret.currentRange = turret.baseRange;
+                turret.currentBulletSpeed = turret.baseBulletSpeed;
+            }
+        }
+
+        function upgradeTurret(turretIndex) {
+            const turret = turrets[turretIndex];
+            if (turret && turret.level < turret.maxLevel && player.coins >= turret.upgradeCost) {
+                player.coins -= turret.upgradeCost;
+                turret.level++;
+                updateTurretStats(turret); 
+                renderShopSection(); 
+            } else {
+                console.warn(`Impossible d'améliorer la tourelle ${turretIndex}. Niveau: ${turret.level}/${turret.maxLevel}, Pièces: ${player.coins}/${turret.upgradeCost}`);
+            }
+        }
+
+        function renderShopSection() {
+            currentCoinsDisplay.textContent = player.coins;
+            turretDamageDisplay.textContent = turretProperties.baseDamage; 
+            turretFireRateDisplay.textContent = (turretProperties.baseFireRate / 1000).toFixed(1);
+            turretRangeDisplay.textContent = turretProperties.baseRange;
+
+            if (player.coins >= turretProperties.cost) {
+                buyTurretButton.disabled = false;
+                buyTurretButton.textContent = `Acheter (${turretProperties.cost} Pièces)`;
+            } else {
+                buyTurretButton.disabled = true;
+                buyTurretButton.textContent = `Manque ${turretProperties.cost - player.coins} Pièces`;
+            }
+
+            turretUpgradeContainer.innerHTML = ''; 
+            if (turrets.length > 0) {
+                const title = document.createElement('h4');
+                title.className = "text-lg font-bold mt-4 mb-2 text-center text-yellow-300";
+                title.textContent = "Vos Tourelles:";
+                turretUpgradeContainer.appendChild(title);
+
+                turrets.forEach((turret, index) => {
+                    const turretItemDiv = document.createElement('div');
+                    turretItemDiv.className = 'upgrade-item'; 
+
+                    turretItemDiv.innerHTML = `
+                        <div class="upgrade-label-row">
+                            <span class="upgrade-label text-yellow-200">Tourelle ${index + 1} (Niv. ${turret.level})</span>
+                            <button class="upgrade-button" data-turret-index="${index}" ${turret.level >= turret.maxLevel || player.coins < turret.upgradeCost ? 'disabled' : ''}>
+                                ${turret.level < turret.maxLevel ? '+' : 'MAX'}
+                            </button>
+                        </div>
+                        <p class="text-sm text-gray-300">Dégâts: ${turret.currentDamage}, Cadence: ${(turret.currentFireRate / 1000).toFixed(1)}s, Portée: ${turret.currentRange}</p>
+                        ${turret.level < turret.maxLevel ? `<p class="text-xs text-gray-400">Coût d'amélioration: ${turret.upgradeCost} Pièces</p>` : `<p class="text-xs text-green-400">Niveau Max atteint</p>`}
+                    `;
+                    turretUpgradeContainer.appendChild(turretItemDiv);
+                });
+
+                turretUpgradeContainer.querySelectorAll('.upgrade-button').forEach(button => {
+                    button.addEventListener('click', (e) => {
+                        const turretIndex = parseInt(e.target.dataset.turretIndex);
+                        upgradeTurret(turretIndex);
+                    });
+                });
+            }
+        }
+
+        function drawEnvironment() {
+            ctx.fillStyle = '#6B8E23'; 
+            ctx.fillRect(0, 0, canvas.width, canvas.height);
+        }
+
+        function drawPlayer() {
+            ctx.save();
+            ctx.translate(player.x, player.y);
+
+            ctx.beginPath();
+            ctx.arc(0, 0, player.radius, 0, Math.PI * 2);
+            ctx.fillStyle = player.invincible ? `rgba(255, 165, 0, ${0.5 + Math.sin(Date.now() / 100) * 0.2})` : player.color; 
+            ctx.fill();
+            ctx.closePath();
+
+            const angle = Math.atan2(mouseY - player.y, mouseX - player.x);
+            ctx.rotate(angle);
+            ctx.fillStyle = 'gray';
+            ctx.fillRect(player.radius, -player.currentWeapon.gunThickness / 2, player.currentWeapon.gunLength, player.currentWeapon.gunThickness);
+            ctx.restore();
+        }
+
+        function drawBullet(bullet) {
+            ctx.beginPath();
+            ctx.arc(bullet.x, bullet.y, bullet.radius * 2, 0, Math.PI * 2); 
+            const gradient = ctx.createRadialGradient(bullet.x, bullet.y, 0, bullet.x, bullet.y, bullet.radius * 2);
+            gradient.addColorStop(0, bullet.color); 
+            gradient.addColorStop(1, 'rgba(0,0,0,0)'); 
+            ctx.fillStyle = gradient;
+            ctx.fill();
+            ctx.closePath();
+
+            ctx.beginPath();
+            ctx.arc(bullet.x - bullet.dx * bullet.radius * 2, bullet.y - bullet.dy * bullet.radius * 2, bullet.radius * 1.5, 0, Math.PI * 2); 
+            ctx.fillStyle = `rgba(255, 255, 0, 0.7)`; 
+            ctx.fill();
+            ctx.closePath();
+        }
+
+        function drawZombie(zombie) {
+            ctx.beginPath();
+            ctx.arc(zombie.x, zombie.y, zombie.radius, 0, Math.PI * 2);
+            ctx.fillStyle = zombie.color;
+            ctx.fill();
+            ctx.closePath();
+
+            ctx.beginPath();
+            ctx.ellipse(zombie.x, zombie.y + zombie.radius / 2, zombie.radius * 0.8, zombie.radius * 0.3, 0, 0, Math.PI * 2);
+            ctx.fillStyle = 'rgba(0, 0, 0, 0.3)';
+            ctx.fill();
+            ctx.closePath();
+
+            if (zombie.stunned) {
+                ctx.fillStyle = 'rgba(255, 255, 0, 0.5)'; 
+                ctx.beginPath();
+                ctx.arc(zombie.x, zombie.y - zombie.radius - 5, zombie.radius * 0.5, 0, Math.PI * 2);
+                ctx.fill();
+                ctx.closePath();
+            }
+        }
+
+        function drawTurret(turret) {
+            ctx.beginPath();
+            ctx.arc(turret.x, turret.y, turret.radius, 0, Math.PI * 2);
+            ctx.fillStyle = turret.color;
+            ctx.fill();
+            ctx.closePath();
+
+            const healthBarWidth = turret.radius * 2; 
+            const healthBarHeight = 4; 
+            const healthPercentage = turret.currentHealth / turret.maxHealth;
+            const currentHealthBarWidth = healthBarWidth * healthPercentage;
+
+            ctx.fillStyle = 'darkgrey';
+            ctx.fillRect(turret.x - healthBarWidth / 2, turret.y - turret.radius - healthBarHeight - 5, healthBarWidth, healthBarHeight);
+
+            ctx.fillStyle = 'lime';
+            ctx.fillRect(turret.x - healthBarWidth / 2, turret.y - turret.radius - healthBarHeight - 5, currentHealthBarWidth, healthBarHeight);
+
+            ctx.strokeStyle = 'black';
+            ctx.lineWidth = 1;
+            ctx.strokeRect(turret.x - healthBarWidth / 2, turret.y - turret.radius - healthBarHeight - 5, healthBarWidth, healthBarHeight);
+
+            let closestZombie = null;
+            let minDistance = turret.currentRange + 1; 
+
+            zombies.forEach(zombie => {
+                const dist = distance(turret.x, turret.y, zombie.x, zombie.y);
+                if (dist < minDistance) {
+                    minDistance = dist;
+                    closestZombie = zombie;
+                }
+            });
+
+            let turretAngle = 0;
+            if (closestZombie) {
+                turretAngle = Math.atan2(closestZombie.y - turret.y, closestZombie.x - turret.x);
+            }
+
+            ctx.save();
+            ctx.translate(turret.x, turret.y);
+            ctx.rotate(turretAngle); 
+            ctx.fillStyle = 'black';
+            ctx.fillRect(turret.radius, -turretProperties.gunThickness / 2, turretProperties.gunLength, turretProperties.gunThickness);
+            ctx.restore();
+        }
+
+        function drawRock(rock) {
+            ctx.beginPath();
+            ctx.arc(rock.x, rock.y, rock.radius, 0, Math.PI * 2);
+            ctx.fillStyle = rock.color;
+            ctx.fill();
+            ctx.closePath();
+            const gradient = ctx.createRadialGradient(rock.x, rock.y, 0, rock.x, rock.y, rock.radius);
+            gradient.addColorStop(0, '#A9A9A9'); 
+            gradient.addColorStop(0.8, '#808080'); 
+            gradient.addColorStop(1, '#696969'); 
+            ctx.fillStyle = gradient;
+            ctx.fill();
+            ctx.strokeStyle = '#505050'; 
+            ctx.lineWidth = 2;
+            ctx.stroke();
+        }
+
+        function drawDeathParticle(particle) {
+            ctx.beginPath();
+            ctx.arc(particle.x, particle.y, particle.radius, 0, Math.PI * 2);
+            ctx.fillStyle = `rgba(255, 255, 255, ${particle.alpha})`; 
+            ctx.fill();
+            ctx.closePath();
+        }
+
+        function drawGunParticle(particle) {
+            ctx.beginPath();
+            ctx.arc(particle.x, particle.y, particle.radius, 0, Math.PI * 2);
+            ctx.fillStyle = `rgba(${particle.color.r}, ${particle.color.g}, ${particle.color.b}, ${particle.alpha})`;
+            ctx.fill();
+            ctx.closePath();
+        }
+
+        function draw() {
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+            drawEnvironment(); 
+            obstacles.forEach(drawRock);
+            drawPlayer();
+            bullets.forEach(drawBullet);
+            zombies.forEach(drawZombie);
+            turrets.forEach(drawTurret);
+            deathParticles.forEach(drawDeathParticle); 
+            gunParticles.forEach(drawGunParticle); 
+
+            const uiBarWidth = 150;
+            const uiBarHeight = 20;
+            const uiBarPadding = 10;
+            const textOffset = 5; 
+            const barSpacing = 5; 
+
+            const currentHealthWidth = (player.currentHealth / player.maxHealth) * uiBarWidth;
+            ctx.fillStyle = 'darkgrey'; ctx.fillRect(uiBarPadding, uiBarPadding, uiBarWidth, uiBarHeight);
+            ctx.fillStyle = 'lime'; ctx.fillRect(uiBarPadding, uiBarPadding, currentHealthWidth, uiBarHeight);
+            ctx.strokeStyle = 'black'; ctx.lineWidth = 2; ctx.strokeRect(uiBarPadding, uiBarPadding, uiBarWidth, uiBarHeight);
+            ctx.font = '16px Arial'; ctx.fillStyle = 'white'; ctx.textAlign = 'left';
+            ctx.fillText(`Vie: ${player.currentHealth}/${player.maxHealth}`, uiBarPadding + textOffset, uiBarPadding + uiBarHeight - textOffset);
+
+            const xpBarY = uiBarPadding + uiBarHeight + barSpacing;
+            const currentXPWidth = (player.currentXP / player.xpToNextLevel) * uiBarWidth;
+            ctx.fillStyle = 'darkgrey'; ctx.fillRect(uiBarPadding, xpBarY, uiBarWidth, uiBarHeight);
+            ctx.fillStyle = 'cyan'; 
+            ctx.fillRect(uiBarPadding, xpBarY, currentXPWidth, uiBarHeight);
+            ctx.strokeStyle = 'black'; ctx.lineWidth = 2; ctx.strokeRect(uiBarPadding, xpBarY, uiBarWidth, uiBarHeight);
+            ctx.font = '16px Arial'; ctx.fillStyle = 'white';
+            ctx.fillText(`XP: ${player.currentXP}/${player.xpToNextLevel}`, uiBarPadding + textOffset, xpBarY + uiBarHeight - textOffset);
+            
+            ctx.font = '20px Arial'; ctx.fillStyle = 'white';
+            ctx.fillText(`Niveau: ${player.level}`, uiBarPadding, xpBarY + uiBarHeight + 25);
+            ctx.fillText(`Points: ${player.pointsDeCompetence}`, uiBarPadding, xpBarY + uiBarHeight + 50);
+            ctx.fillText(`Pièces: ${player.coins}`, uiBarPadding, xpBarY + uiBarHeight + 75); 
+
+            ctx.fillText(`Arme: ${player.currentWeapon.name}`, uiBarPadding, xpBarY + uiBarHeight + 100);
+
+            ctx.font = '20px Arial'; ctx.fillStyle = 'white'; ctx.textAlign = 'left'; 
+            const ammoText = `Munitions: ${player.currentAmmoInClip} / ${player.currentWeapon.maxAmmoInClip}`;
+            const reloadText = "Rechargement...";
+            const ammoY = canvas.height - uiBarPadding - (player.reloading ? 25 : 0); 
+            const reloadY = canvas.height - uiBarPadding; 
+            ctx.fillText(ammoText, uiBarPadding, ammoY); 
+            if (player.reloading) {
+                ctx.fillStyle = 'red';
+                ctx.fillText(reloadText, uiBarPadding, reloadY); 
+            }
+
+            const minutes = Math.floor(gameTime / 60000);
+            const seconds = Math.floor((gameTime % 60000) / 1000);
+            const formattedTime = `${String(minutes).padStart(2, '0')}:${String(seconds).padStart(2, '0')}`;
+            ctx.font = '30px Arial'; ctx.fillStyle = 'white'; ctx.textAlign = 'center';
+            ctx.fillText(formattedTime, canvas.width / 2, 40);
+
+            if (gameOver) {
+                ctx.font = 'bold 60px Arial'; ctx.fillStyle = 'red'; ctx.textAlign = 'center';
+                ctx.fillText("GAME OVER", canvas.width / 2, canvas.height / 2 - 30);
+                ctx.font = 'bold 30px Arial'; ctx.fillStyle = 'white';
+                ctx.fillText("Appuyez sur R pour rejouer", canvas.width / 2, canvas.height / 2 + 20);
+            }
+        }
+
+        function checkCircleCollision(c1, c2) {
+            return distance(c1.x, c1.y, c2.x, c2.y) < c1.radius + c2.radius;
+        }
+
+        function resolveCircleCollision(c1, c2) {
+            const dist = distance(c1.x, c1.y, c2.x, c2.y);
+            const overlap = c1.radius + c2.radius - dist;
+            if (overlap > 0) {
+                if (dist === 0) { 
+                    c1.x += Math.random() * 0.1 - 0.05;
+                    c1.y += Math.random() * 0.1 - 0.05;
+                    return;
+                }
+                const angle = Math.atan2(c1.y - c2.y, c1.x - c2.x);
+                const moveX = Math.cos(angle) * overlap;
+                const moveY = Math.sin(angle) * overlap;
+                c1.x += moveX;
+                c1.y += moveY;
+            }
+        }
+
+        function update(deltaTime) {
+            if (gameOver || currentScreen === 'pause') { // Ne pas mettre à jour l'état du jeu si en pause ou jeu terminé
+                return;
+            }
+
+            gameTime += deltaTime; 
+
+            if (player.level >= 10) {
+                if (assaultRifleButton.disabled) {
+                    assaultRifleButton.disabled = false;
+                    assaultRifleButton.textContent = "Fusil d'assaut"; 
+                    console.log("Fusil d'assaut débloqué !");
+                }
+            } else {
+                if (!assaultRifleButton.disabled || assaultRifleButton.textContent === "Fusil d'assaut") { 
+                    assaultRifleButton.disabled = true;
+                    assaultRifleButton.textContent = "Fusil d'assaut (Niveau 10 requis)"; 
+                }
+                if (player.currentWeaponType === 'assaultRifle') { // Si le joueur a le fusil d'assaut avant le niveau 10 (ex: réinitialisation après l'avoir obtenu)
+                    selectWeapon('pistol'); // Revenir au pistolet
+                }
+            }
+
+            const minutesElapsed = Math.floor(gameTime / 60000);
+            if (minutesElapsed > lastMinuteUpdate) {
+                lastMinuteUpdate = minutesElapsed;
+                zombieSpawnInterval /= 1.3; 
+                zombieSpawnInterval = Math.max(500, zombieSpawnInterval); 
+            }
+
+            if (gameTime - lastHordeTime >= hordeInterval) {
+                spawnHorde();
+                lastHordeTime = gameTime; 
+                hordeMultiplier *= 2; 
+            }
+
+            // Correction: Utiliser gameTime pour l'apparition des boss zombies
+            if (gameTime - lastBossZombieSpawnTime > bossZombieSpawnInterval) {
+                spawnZombie(bossZombieProperties);
+                lastBossZombieSpawnTime = gameTime; // Mise à jour avec gameTime
+            }
+
+            let dx = 0; 
+            let dy = 0; 
+
+            if (keys[playerControls.forward]) dy -= 1; 
+            if (keys[playerControls.backward]) dy += 1; 
+            if (keys[playerControls.left]) dx -= 1; 
+            if (keys[playerControls.right]) dx += 1; 
+
+            if (dx !== 0 && dy !== 0) {
+                const length = Math.sqrt(dx * dx + dy * dy);
+                dx /= length;
+                dy /= length;
+            }
+
+            player.x += dx * player.speed;
+            player.y += dy * player.speed;
+
+            obstacles.forEach(rock => {
+                if (checkCircleCollision(player, rock)) {
+                    resolveCircleCollision(player, rock);
+                }
+            });
+
+            if (player.x - player.radius < 0) { player.x = player.radius; } 
+            else if (player.x + player.radius > canvas.width) { player.x = canvas.width - player.radius; }
+            if (player.y - player.radius < 0) { player.y = player.radius; } 
+            else if (player.y + player.radius > canvas.height) { player.y = canvas.height - player.radius; }
+
+            for (let i = bullets.length - 1; i >= 0; i--) {
+                const bullet = bullets[i];
+                bullet.x += bullet.dx * bullet.speed;
+                bullet.y += bullet.dy * bullet.speed;
+
+                if (bullet.x < 0 || bullet.x > canvas.width || bullet.y < 0 || bullet.y > canvas.height) {
+                    bullets.splice(i, 1); 
+                    continue; 
+                }
+
+                let hitRock = false;
+                for (let k = obstacles.length - 1; k >= 0; k--) {
+                    const rock = obstacles[k];
+                    if (checkCircleCollision(bullet, rock)) {
+                        bullets.splice(i, 1); 
+                        hitRock = true;
+                        break; 
+                    }
+                }
+                if (hitRock) continue; 
+
+                for (let j = zombies.length - 1; j >= 0; j--) {
+                    const zombie = zombies[j];
+                    if (distance(bullet.x, bullet.y, zombie.x, zombie.y) < bullet.radius + zombie.radius) {
+                        zombie.health -= bullet.damage; 
+                        bullets.splice(i, 1); 
+
+                        if (zombie.health <= 0) {
+                            zombies.splice(j, 1); 
+                            playDeathSound(); // Jouer le son de mort de zombie
+                            for (let k = 0; k < 10; k++) { 
+                                deathParticles.push({
+                                    x: zombie.x, y: zombie.y, radius: Math.random() * 5 + 2,
+                                    dx: (Math.random() - 0.5) * 2, dy: (Math.random() - 0.5) * 2,
+                                    alpha: 1, fadeSpeed: Math.random() * 0.03 + 0.01
+                                });
+                            }
+                            player.currentXP += zombie.xpValue; 
+                            player.coins += zombie.coinsValue; 
+                            while (player.currentXP >= player.xpToNextLevel) {
+                                player.currentXP -= player.xpToNextLevel;
+                                player.level++;
+                                player.xpToNextLevel = calculateXpRequired(player.level);
+                                player.pointsDeCompetence += 3; 
+                            }
+                        }
+                        break; 
+                    }
+                }
+            }
+
+            for (let i = zombies.length - 1; i >= 0; i--) {
+                const zombie = zombies[i];
+                if (zombie.stunned) {
+                    if (gameTime - zombie.stunTime > zombieStunDuration) { // Correction: Utiliser gameTime pour le minuteur d'étourdissement
+                        zombie.stunned = false; 
+                    } else {
+                        continue; 
+                    }
+                }
+
+                let target = player;
+                let minDistanceToTarget = distance(zombie.x, zombie.y, player.x, player.y);
+
+                turrets.forEach(turret => {
+                    if (turret.currentHealth > 0) {
+                        const distToTurret = distance(zombie.x, zombie.y, turret.x, turret.y);
+                        if (distToTurret < minDistanceToTarget) {
+                            minDistanceToTarget = distToTurret;
+                            target = turret;
+                        }
+                    }
+                });
+
+                const angleToTarget = Math.atan2(target.y - zombie.y, target.x - zombie.x);
+                zombie.x += Math.cos(angleToTarget) * zombie.speed;
+                zombie.y += Math.sin(angleToTarget) * zombie.speed;
+
+                obstacles.forEach(rock => {
+                    if (checkCircleCollision(zombie, rock)) {
+                        resolveCircleCollision(zombie, rock);
+                    }
+                });
+
+                if (target === player) {
+                    if (!player.invincible && checkCircleCollision(player, zombie)) {
+                        player.currentHealth -= 10; 
+                        playDamageSound(); // Jouer le son de dégâts du joueur
+                        player.invincible = true; 
+                        zombie.stunned = true; 
+                        zombie.stunTime = gameTime; // Correction: Utiliser gameTime pour le minuteur d'étourdissement
+
+                        setTimeout(() => { player.invincible = false; }, player.invincibilityTime);
+
+                        if (player.currentHealth <= 0) {
+                            player.currentHealth = 0; 
+                            gameOver = true; 
+                        }
+                    }
+                } else { 
+                    if (checkCircleCollision(target, zombie)) {
+                        target.currentHealth -= 5; 
+                        zombie.stunned = true; 
+                        zombie.stunTime = gameTime; // Correction: Utiliser gameTime pour le minuteur d'étourdissement
+                        
+                        if (target.currentHealth <= 0) {
+                            const turretIndex = turrets.indexOf(target);
+                            if (turretIndex > -1) {
+                                turrets.splice(turretIndex, 1); 
+                            }
+                        }
+                    }
+                }
+            }
+
+            const currentTime = gameTime; // Correction: Utiliser gameTime de manière cohérente
+            turrets.forEach(turret => {
+                if (turret.currentHealth <= 0) return; 
+
+                if (currentTime - turret.lastShotTime > turret.currentFireRate) { 
+                    let closestZombie = null;
+                    let minDistance = turret.currentRange + 1; 
+
+                    zombies.forEach(zombie => {
+                        const dist = distance(turret.x, turret.y, zombie.x, zombie.y);
+                        if (dist < minDistance) {
+                            minDistance = dist;
+                            closestZombie = zombie;
+                        }
+                    });
+
+                    if (closestZombie) {
+                        const angleToZombie = Math.atan2(closestZombie.y - turret.y, closestZombie.x - turret.x);
+                        const speedX = Math.cos(angleToZombie) * turret.currentBulletSpeed; 
+                        const speedY = Math.sin(angleToZombie) * turret.currentBulletSpeed;
+
+                        bullets.push({
+                            x: turret.x, y: turret.y, radius: player.currentWeapon.bulletProperties.radius,
+                            color: turret.color, speed: turret.currentBulletSpeed, dx: speedX, dy: speedY,
+                            damage: turret.currentDamage 
+                        });
+                        turret.lastShotTime = currentTime; // Correction: Mise à jour avec gameTime
+                        playShootSound(); // Jouer le son de tir de la tourelle
+
+                        createGunParticles(turret.x + Math.cos(angleToZombie) * (turret.radius + turretProperties.gunLength), 
+                                           turret.y + Math.sin(angleToZombie) * (turret.radius + turretProperties.gunLength), 
+                                           5, {r: 255, g: 200, b: 0}); 
+                    }
+                }
+            });
+
+            for (let i = deathParticles.length - 1; i >= 0; i--) {
+                const particle = deathParticles[i];
+                particle.x += particle.dx;
+                particle.y += particle.dy;
+                particle.alpha -= particle.fadeSpeed;
+                if (particle.alpha <= 0) { deathParticles.splice(i, 1); }
+            }
+
+            for (let i = gunParticles.length - 1; i >= 0; i--) {
+                const particle = gunParticles[i];
+                particle.x += particle.dx;
+                particle.y += particle.dy;
+                particle.alpha -= particle.fadeSpeed;
+                if (particle.alpha <= 0) { gunParticles.splice(i, 1); }
+            }
+
+            // Correction: Utiliser gameTime pour l'apparition des zombies
+            if (currentTime - lastZombieSpawnTime > zombieSpawnInterval) {
+                spawnZombie(zombieProperties);
+                lastZombieSpawnTime = currentTime;
+            }
+
+            // Correction: Utiliser gameTime pour l'apparition des zombies rapides
+            if (currentTime - lastFastZombieSpawnTime > fastZombieSpawnInterval) {
+                spawnZombie(fastZombieProperties);
+                lastFastZombieSpawnTime = currentTime;
+            }
+        }
+
+        function reload() {
+            if (!player.reloading && player.currentAmmoInClip < player.currentWeapon.maxAmmoInClip) {
+                console.log("Début du rechargement..."); 
+                player.reloading = true; 
+                playReloadSound(); // Jouer le son de rechargement
+                setTimeout(() => {
+                    player.currentAmmoInClip = player.currentWeapon.maxAmmoInClip; 
+                    player.reloading = false; 
+                    console.log("Rechargement terminé !"); 
+                }, player.currentWeapon.reloadTime); 
+            }
+        }
+
+        function createGunParticles(x, y, count, color) {
+            for (let i = 0; i < count; i++) {
+                gunParticles.push({
+                    x: x, y: y, radius: Math.random() * 2 + 1,
+                    dx: (Math.random() - 0.5) * 4, dy: (Math.random() - 0.5) * 4,
+                    alpha: 1, fadeSpeed: Math.random() * 0.05 + 0.02, color: color
+                });
+            }
+        }
+
+        function initializeRocks() {
+            obstacles.length = 0; 
+            const numRocks = 5;
+            const maxAttempts = 200; 
+            const minDistanceBetweenRocks = rockProperties.radius * 2.5; 
+            const minDistanceFromPlayer = player.radius * 5; 
+            const marginFromEdge = rockProperties.radius + 10; 
+
+            for (let i = 0; i < numRocks; i++) {
+                let placed = false;
+                let attempts = 0;
+                while (!placed && attempts < maxAttempts) {
+                    const newRock = {
+                        x: marginFromEdge + Math.random() * (canvas.width - 2 * marginFromEdge),
+                        y: marginFromEdge + Math.random() * (canvas.height - 2 * marginFromEdge),
+                        radius: rockProperties.radius, color: rockProperties.color, type: 'rock'
+                    };
+
+                    let canPlace = true;
+                    if (distance(newRock.x, newRock.y, player.x, player.y) < newRock.radius + player.radius + minDistanceFromPlayer) {
+                        canPlace = false;
+                    }
+
+                    if (canPlace) {
+                        for (const existingRock of obstacles) {
+                            if (distance(newRock.x, newRock.y, existingRock.x, existingRock.y) < newRock.radius + existingRock.radius + minDistanceBetweenRocks) {
+                                canPlace = false;
+                                break;
+                            }
+                        }
+                    }
+
+                    if (canPlace) {
+                        obstacles.push(newRock);
+                        placed = true;
+                    }
+                    attempts++;
+                }
+                if (!placed) {
+                    console.warn(`Impossible de placer le rocher ${i + 1} après ${maxAttempts} tentatives. Ignoré.`);
+                }
+            }
+            console.log(`Total de rochers initialisés : ${obstacles.length}`);
+        }
+
+        /**
+         * La boucle de jeu principale.
+         * Appelle update() pour la logique du jeu et draw() pour le rendu.
+         * @param {number} timestamp - Le temps actuel fourni par requestAnimationFrame.
+         */
+        function gameLoop(timestamp) {
+            // Correction: Réinitialiser lastFrameTime si la boucle est redémarrée après une pause ou un reset
+            if (lastFrameTime === 0 || lastFrameTime > timestamp) { // Si 0 (nouveau départ) ou si le timestamp a reculé (changement d'onglet)
+                lastFrameTime = timestamp;
+            }
+            const deltaTime = timestamp - lastFrameTime; // deltaTime en millisecondes
+            lastFrameTime = timestamp;
+
+            update(deltaTime); // Met à jour l'état du jeu avec le temps écoulé
+            draw(); // Dessine les éléments du jeu
+            if (currentScreen === 'game' || currentScreen === 'pause') { // Continuer la boucle seulement si en jeu ou en pause
+                requestAnimationFrame(gameLoop); // Demander la prochaine frame
+            }
+        }
+
+        // Fonction pour démarrer le jeu depuis le menu principal
+        function startGame() {
+            resizeCanvas(); // Définir la taille du canvas
+            player.xpToNextLevel = calculateXpRequired(player.level);
+            selectWeapon(player.currentWeaponType); // Définir l'arme initiale
+            initializeRocks(); // Placer les rochers initiaux
+            renderShopSection(); // Mettre à jour l'interface de la boutique
+            // Réinitialiser les timers de spawn avec gameTime
+            lastZombieSpawnTime = gameTime; 
+            lastFastZombieSpawnTime = gameTime;
+            lastBossZombieSpawnTime = gameTime;
+            gameLoop(0); // Démarrer la boucle de jeu (passant 0 pour le deltaTime initial)
+            console.log("Jeu chargé et démarré.");
+        }
+
+        /**
+         * Réinitialise l'état du jeu pour démarrer une nouvelle partie.
+         */
+        function resetGame() {
+            player.currentHealth = player.maxHealth; 
+            player.reloading = false;
+            player.invincible = false;
+            bullets.length = 0; 
+            zombies.length = 0; 
+            turrets.length = 0; 
+            deathParticles.length = 0; 
+            gunParticles.length = 0; 
+            gameOver = false; 
+            player.x = canvas.width / 2; 
+            player.y = canvas.height / 2;
+            lastZombieSpawnTime = 0; // Réinitialiser les timers de spawn à 0, ils seront définis sur gameTime au démarrage du jeu
+            lastFastZombieSpawnTime = 0; 
+            lastBossZombieSpawnTime = 0; 
+            gameTime = 0; 
+            lastMinuteUpdate = 0; 
+            zombieSpawnInterval = 3000; 
+            lastHordeTime = 0; 
+            hordeMultiplier = 1; 
+            initializeRocks(); 
+
+            player.currentXP = 0;
+            player.level = 1;
+            player.xpToNextLevel = calculateXpRequired(player.level); 
+            player.pointsDeCompetence = 0;
+            player.coins = 0; 
+
+            for (const weaponType in player.weapons) {
+                for (const upgradeType in player.weapons[weaponType].upgrades) {
+                    player.weapons[weaponType].upgrades[upgradeType].level = 0;
+                }
+            }
+
+            assaultRifleButton.disabled = true; 
+            assaultRifleButton.textContent = "Fusil d'assaut (Niveau 10 requis)"; 
+            selectWeapon('pistol'); 
+
+            isMenuOpen = false;
+            weaponMenu.classList.remove('open');
+            renderShopSection(); 
+
+            // Correction: Réinitialiser lastFrameTime ici pour garantir un deltaTime correct au prochain startGame
+            lastFrameTime = 0; 
+            console.log("Jeu réinitialisé.");
+        }
+
+        /**
+         * Met à jour l'affichage des liaisons de touches dans le menu principal des paramètres.
+         */
+        function updateKeyBindingsUI() {
+            keyForwardDisplay.textContent = playerControls.forward.toUpperCase();
+            keyBackwardDisplay.textContent = playerControls.backward.toUpperCase();
+            keyLeftDisplay.textContent = playerControls.left.toUpperCase();
+            keyRightDisplay.textContent = playerControls.right.toUpperCase();
+        }
+
+        /**
+         * Met à jour l'affichage de l'interface de remappage avec les liaisons de touches actuelles.
+         */
+        function updateRemapInterfaceUI() {
+            remapKeyItems.forEach(item => {
+                const action = item.dataset.action;
+                const displaySpan = item.querySelector('.key-bind-display');
+                if (action && displaySpan) {
+                    displaySpan.textContent = playerControls[action].toUpperCase();
+                    item.classList.remove('remapping'); // Réinitialiser l'état visuel
+                }
+            });
+        }
+
+        /**
+         * Démarre le processus de remappage des touches pour une action spécifique.
+         * @param {string} action - L'action à remapper ('forward', 'backward', 'left', 'right').
+         * @param {HTMLElement} element - L'élément DOM dont le contenu textuel sera mis à jour.
+         */
+        function startRemapping(action, element) {
+            isRemapping = true;
+            currentRemapAction = action;
+            currentRemapElement = element;
+
+            remapKeyItems.forEach(item => item.classList.remove('remapping'));
+            currentRemapElement.closest('.key-bind-item').classList.add('remapping');
+            currentRemapElement.textContent = 'Appuyez sur une touche...';
+            console.log(`Remaillage de ${action}. En attente d'une pression de touche...`);
+            showMessage(`Appuyez sur une touche pour "${action}"...`, 99999); // Afficher le message indéfiniment
+        }
+
+        /**
+         * Termine le processus de remappage des touches avec la touche choisie.
+         * @param {string} newKey - La nouvelle touche à assigner à l'action actuelle.
+         */
+        function completeRemapping(newKey) {
+            if (!currentRemapAction || !currentRemapElement) return;
+
+            // Vérifier si la nouvelle touche est déjà assignée à une autre action
+            for (const action in playerControls) {
+                if (playerControls.hasOwnProperty(action) && playerControls[action] === newKey && action !== currentRemapAction) {
+                    showMessage(`La touche '${newKey.toUpperCase()}' est déjà utilisée par "${action}" !`, 3000);
+                    currentRemapElement.textContent = playerControls[currentRemapAction].toUpperCase(); // Rétablir l'affichage
+                    currentRemapElement.closest('.key-bind-item').classList.remove('remapping');
+                    isRemapping = false;
+                    currentRemapAction = null;
+                    currentRemapElement = null;
+                    return; // Annuler le remappage
+                }
+            }
+
+            playerControls[currentRemapAction] = newKey;
+            currentRemapElement.textContent = newKey.toUpperCase();
+            currentRemapElement.closest('.key-bind-item').classList.remove('remapping');
+            showMessage(`"${currentRemapAction.charAt(0).toUpperCase() + currentRemapAction.slice(1)}" est maintenant lié à '${newKey.toUpperCase()}' !`, 2000);
+            
+            isRemapping = false;
+            currentRemapAction = null;
+            currentRemapElement = null;
+        }
+
+
+        // --- ÉCOUTEURS D'ÉVÉNEMENTS (Combinés des deux fichiers) ---
+
+        // Événements clavier pour le contrôle du jeu/menu
+        document.addEventListener('keydown', (e) => {
+            const key = e.key.toLowerCase();
+            
+            // Gérer le remappage en premier si actif
+            if (isRemapping) {
+                if (key === 'escape') {
+                    playClickSound();
+                    currentRemapElement.textContent = playerControls[currentRemapAction].toUpperCase(); // Rétablir l'affichage
+                    currentRemapElement.closest('.key-bind-item').classList.remove('remapping');
+                    isRemapping = false;
+                    currentRemapAction = null;
+                    currentRemapElement = null;
+                    showMessage("Remaillage annulé.", 1500);
+                    e.preventDefault();
+                    return;
+                }
+                // Empêcher le remappage avec certaines touches spéciales (ex: F1-F12, modificateurs)
+                if (e.repeat || ['control', 'alt', 'shift', 'meta', 'f1', 'f2', 'f3', 'f4', 'f5', 'f6', 'f7', 'f8', 'f9', 'f10', 'f11', 'f12'].includes(key)) {
+                    showMessage("Veuillez choisir une touche valide (pas de touches spéciales ni de modificateurs).", 2500);
+                    return;
+                }
+                playClickSound();
+                completeRemapping(key);
+                e.preventDefault();
+                return; // Arrêter de traiter d'autres événements keydown pour le remappage
+            }
+
+            // Gestion normale des touches du jeu/menu
+            if (currentScreen === 'game') {
+                // Vérifier si la touche enfoncée est l'une de nos commandes joueur ou d'autres touches de jeu
+                 if (Object.values(playerControls).includes(key) || key === 'r' || key === 'b' || key === 'escape') {
+                     keys[key] = true;
+                     e.preventDefault();
+                 }
+                
+                if (key === 'r') {
+                    if (gameOver) {
+                        resetGame(); 
+                        startGame(); 
+                        setScreen('game'); 
+                    } else {
+                        reload(); 
+                    }
+                } else if (key === 'b') { 
+                    isMenuOpen = !isMenuOpen;
+                    if (isMenuOpen) {
+                        weaponMenu.classList.add('open');
+                        renderUpgradeSection(); 
+                        renderShopSection(); 
+                        console.log("Menu en jeu ouvert.");
+                    } else {
+                        weaponMenu.classList.remove('open');
+                        console.log("Menu en jeu fermé.");
+                    }
+                } else if (key === 'escape') {
+                    playClickSound();
+                    setScreen('pause'); 
+                }
+            } else if (currentScreen === 'pause') {
+                if (key === 'escape') {
+                    playClickSound();
+                    setScreen('game'); 
+                    requestAnimationFrame(gameLoop); // Reprendre la boucle de jeu en appuyant sur échap depuis la pause
+                }
+            }
+        });
+
+        document.addEventListener('keyup', (e) => {
+            const key = e.key.toLowerCase();
+            // Ceci s'applique globalement pour relâcher toute touche physique
+            if (keys.hasOwnProperty(key) || Object.values(playerControls).includes(key) ) {
+                keys[key] = false;
+            }
+            e.preventDefault();
+        });
+
+        // Événements de souris pour la visée et le tir
+        document.addEventListener('mousemove', (e) => {
+            mouseX = e.clientX;
+            mouseY = e.clientY;
+        });
+
+        canvas.addEventListener('click', (e) => {
+            if (e.button === 0 && !gameOver && currentScreen === 'game' && !isMenuOpen) { 
+                const currentTime = gameTime; // Correction: Utiliser gameTime de manière cohérente
+                
+                if (!player.reloading && player.currentAmmoInClip > 0 && (currentTime - player.lastShotTime > player.currentWeapon.fireRate)) {
+                    player.currentAmmoInClip--; 
+                    player.lastShotTime = currentTime; 
+                    playShootSound(); // Jouer le son de tir du joueur
+
+                    const angle = Math.atan2(mouseY - player.y, mouseX - player.x);
+                    const gunBaseX = player.radius; 
+                    const gunBaseY = 0; 
+                    const gunTipXLocal = gunBaseX + player.currentWeapon.gunLength;
+                    const gunTipYLocal = gunBaseY;
+                    const rotatedGunTipX = gunTipXLocal * Math.cos(angle) - gunTipYLocal * Math.sin(angle);
+                    const rotatedGunTipY = gunTipXLocal * Math.sin(angle) + gunTipYLocal * Math.cos(angle);
+                    const bulletStartX = player.x + rotatedGunTipX;
+                    const bulletStartY = player.y + rotatedGunTipY;
+
+                    const speedX = Math.cos(angle);
+                    const speedY = Math.sin(angle);
+
+                    bullets.push({
+                        x: bulletStartX, y: bulletStartY, radius: player.currentWeapon.bulletProperties.radius,
+                        color: player.currentWeapon.bulletProperties.color, speed: player.currentWeapon.bulletProperties.speed,
+                        dx: speedX, dy: speedY, damage: player.currentWeapon.bulletProperties.currentDamage 
+                    });
+
+                    createGunParticles(bulletStartX, bulletStartY, 8, {r: 255, g: 255, b: 0}); 
+                    
+                    if (player.currentAmmoInClip === 0) {
+                        reload();
+                    }
+                }
+            }
+        });
+
+        // Gestionnaires de clics des boutons du menu principal
+        playButton.addEventListener('click', () => {
+            console.log('Bouton Jouer cliqué');
+            initAudio(); 
+            playClickSound();
+            showMessage('Lancement du jeu...');
+            setScreen('game');
+            startGame(); // Démarrer la logique du jeu
+        });
+
+        settingsButton.addEventListener('click', () => {
+            console.log('Ouverture des paramètres');
+            initAudio(); 
+            playClickSound();
+            setScreen('settings');
+        });
+
+        backButton.addEventListener('click', () => {
+            console.log('Retour au menu principal depuis les paramètres');
+            playClickSound();
+            setScreen('mainMenu');
+        });
+
+        resumeGameButton.addEventListener('click', () => {
+            console.log('Reprendre le jeu');
+            playClickSound();
+            setScreen('game'); 
+            requestAnimationFrame(gameLoop); // Reprendre la boucle de jeu
+        });
+
+        backToMenuFromGameButton.addEventListener('click', () => {
+            console.log('Retour au menu principal depuis le jeu');
+            playClickSound();
+            resetGame(); // Réinitialiser l'état du jeu
+            setScreen('mainMenu');
+        });
+
+        quitButton.addEventListener('click', () => {
+            console.log('Bouton Quitter cliqué');
+            initAudio(); 
+            playClickSound();
+            showMessage('Vous avez quitté le jeu !');
+            // Dans une application réelle, vous pourriez fermer la fenêtre ou naviguer ailleurs
+        });
+
+        // Boutons de sélection d'armes en jeu
+        document.getElementById('pistolButton').addEventListener('click', () => {
+            selectWeapon('pistol');
+        });
+
+        document.getElementById('assaultRifleButton').addEventListener('click', () => {
+            selectWeapon('assaultRifle');
+        });
+
+        // Bouton d'achat de tourelle en jeu
+        buyTurretButton.addEventListener('click', () => {
+            if (player.coins >= turretProperties.cost) {
+                player.coins -= turretProperties.cost;
+                const newTurret = {
+                    x: player.x, y: player.y, radius: turretProperties.radius, color: turretProperties.color, lastShotTime: 0, // Initialiser à 0, sera mis à jour par la logique de la tourelle
+                    baseFireRate: turretProperties.baseFireRate, baseDamage: turretProperties.baseDamage, baseRange: turretProperties.baseRange, baseBulletSpeed: turretProperties.baseBulletSpeed,
+                    currentFireRate: turretProperties.baseFireRate, currentDamage: turretProperties.baseDamage, currentRange: turretProperties.baseRange, currentBulletSpeed: turretProperties.baseBulletSpeed,
+                    gunLength: turretProperties.gunLength, gunThickness: turretProperties.gunThickness,
+                    level: 1, maxLevel: turretProperties.maxLevel, upgradeCost: turretProperties.upgradeCost, maxHealth: turretProperties.maxHealth, currentHealth: turretProperties.maxHealth
+                };
+                turrets.push(newTurret);
+                updateTurretStats(newTurret); 
+                renderShopSection(); 
+            } else {
+                console.warn(`Impossible d'acheter la tourelle. Pas assez de pièces. Besoin de ${turretProperties.cost}, vous avez ${player.coins}`);
+            }
+        });
+
+        // --- GESTIONNAIRES DE L'INTERFACE UTILISATEUR DES PARAMÈTRES ---
+        volumeSlider.addEventListener('change', (e) => {
+            const volumeValue = e.target.value;
+            if (isAudioInitialized) {
+                masterGainNode.gain.value = volumeValue / 100;
+                console.log(`Volume changé à : ${volumeValue}`);
+                playSoundFeedback();
+            }
+        });
+
+        qualityButtonsContainer.addEventListener('click', (e) => {
+            if (e.target.classList.contains('quality-btn')) {
+                initAudio();
+                playClickSound();
+                qualityButtonsContainer.querySelectorAll('.quality-btn').forEach(btn => {
+                    btn.classList.remove('bg-indigo-600');
+                    btn.classList.add('bg-gray-600', 'hover:bg-indigo-500');
+                });
+                e.target.classList.add('bg-indigo-600');
+                e.target.classList.remove('bg-gray-600', 'hover:bg-indigo-500');
+                
+                const qualityLevel = e.target.textContent;
+                console.log(`Qualité changée à : ${qualityLevel}`);
+                showMessage(`Qualité : ${qualityLevel}`);
+            }
+        });
+
+        remapKeysButton.addEventListener('click', () => {
+            console.log('Ouverture du menu de remappage des touches');
+            initAudio();
+            playClickSound();
+            setScreen('remapKeys');
+        });
+
+        backFromRemapButton.addEventListener('click', () => {
+            console.log('Retour aux paramètres depuis le remappage');
+            playClickSound();
+            // Si le remappage était actif, l'annuler avant de revenir
+            if (isRemapping) {
+                if (currentRemapElement) { // S'assurer que l'élément existe avant d'accéder à ses propriétés
+                    currentRemapElement.textContent = playerControls[currentRemapAction].toUpperCase(); // Rétablir l'affichage
+                    currentRemapElement.closest('.key-bind-item').classList.remove('remapping');
+                }
+                isRemapping = false;
+                currentRemapAction = null;
+                currentRemapElement = null;
+                showMessage("Remaillage annulé.", 1500);
+            }
+            setScreen('settings');
+        });
+
+        // Écouteurs d'événements pour le remappage de touches spécifiques
+        remapKeyItems.forEach(item => {
+            item.addEventListener('click', (e) => {
+                // S'assurer que nous cliquons sur l'élément ou ses enfants directs, pas des clics externes
+                const targetElement = e.target.closest('.key-bind-item');
+                if (targetElement && !isRemapping) { // Autoriser seulement si le remappage n'est pas déjà actif
+                    playClickSound();
+                    const action = targetElement.dataset.action;
+                    const displaySpan = targetElement.querySelector('.key-bind-display');
+                    if (action && displaySpan) {
+                        startRemapping(action, displaySpan);
+                    }
+                }
+            });
+        });
+
+
+        // Configuration initiale: afficher le menu principal au chargement de la page
+        window.addEventListener('load', () => {
+            setScreen('mainMenu'); // Démarrer sur le menu principal
+            resizeCanvas(); // Définir la taille du canvas initialement, même s'il n'est pas visible
+            window.addEventListener('resize', resizeCanvas); // Écouter les événements de redimensionnement
+            console.log("Page chargée. Menu principal affiché.");
+        });
+
+    </script>
+</body>
+</html>
